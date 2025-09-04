@@ -3,362 +3,372 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Alat Deteksi Gerakan & Penggaris Digital</title>
+    <title>Multi-Alat Sensor Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pustaka untuk Pemindai QR dan Penampil 360 -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            touch-action: manipulation;
+        body { font-family: 'Inter', sans-serif; touch-action: manipulation; }
+        .tab-button.active { background-color: #4f46e5; color: white; }
+        #video-container, #qr-video-container, #viewer-360 {
+            position: relative; width: 100%; max-width: 640px;
+            aspect-ratio: 4 / 3; margin: auto; border-radius: 0.5rem;
+            overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background-color: #1f2937;
         }
-        .tab-button.active {
-            background-color: #4f46e5;
-            color: white;
+        .video-element, .canvas-element, #viewer-360 canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         }
-        #video-container {
-            position: relative;
-            width: 100%;
-            max-width: 640px;
-            aspect-ratio: 4 / 3;
-            margin: auto;
-            border-radius: 0.5rem;
-            overflow: hidden;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        #video, #canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        #video {
-            object-fit: cover;
-            transform: scaleX(-1); /* Cermin untuk kamera depan */
-        }
-        #canvas {
-            z-index: 10;
-        }
-        /* Penanda crosshair di tengah */
-        #video-container::after {
-            content: '+';
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 32px;
-            color: rgba(255, 255, 255, 0.7);
-            z-index: 15;
-            pointer-events: none;
+        .video-element { object-fit: cover; }
+        .canvas-element { z-index: 10; }
+        #video-container::after, #qr-video-container::after {
+            content: '+'; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); font-size: 32px;
+            color: rgba(255, 255, 255, 0.8); text-shadow: 0 0 4px black;
+            z-index: 15; pointer-events: none;
         }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-200 flex flex-col items-center justify-center min-h-screen p-4">
 
     <div class="w-full max-w-2xl mx-auto bg-gray-800 rounded-xl shadow-2xl p-6 space-y-6">
-        <h1 class="text-3xl font-bold text-center text-white mb-2">Multi-Alat Sensor</h1>
-        <p class="text-center text-gray-400 mb-6">Gunakan sensor perangkat Anda untuk mengukur gerakan dan jarak.</p>
+        <h1 class="text-3xl font-bold text-center text-white mb-2">Multi-Alat Sensor Pro</h1>
+        <p class="text-center text-gray-400 mb-6">Peralatan canggih menggunakan sensor perangkat Anda.</p>
 
         <!-- Navigasi Tab -->
-        <div class="flex border-b border-gray-700">
-            <button id="tab-pedometer" class="tab-button flex-1 py-3 px-4 text-center font-semibold text-gray-300 rounded-t-lg transition duration-300 hover:bg-gray-700 active">Pedometer</button>
-            <button id="tab-ruler" class="tab-button flex-1 py-3 px-4 text-center font-semibold text-gray-300 rounded-t-lg transition duration-300 hover:bg-gray-700">Penggaris Digital</button>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1 bg-gray-700/50 rounded-lg p-1">
+            <button data-tab="pedometer" class="tab-button py-2 px-2 text-center font-semibold text-gray-300 rounded-md transition duration-300 hover:bg-gray-700 text-sm active">Pedometer</button>
+            <button data-tab="ruler" class="tab-button py-2 px-2 text-center font-semibold text-gray-300 rounded-md transition duration-300 hover:bg-gray-700 text-sm">Penggaris</button>
+            <button data-tab="qr" class="tab-button py-2 px-2 text-center font-semibold text-gray-300 rounded-md transition duration-300 hover:bg-gray-700 text-sm">Pemindai QR</button>
+            <button data-tab="vr" class="tab-button py-2 px-2 text-center font-semibold text-gray-300 rounded-md transition duration-300 hover:bg-gray-700 text-sm">Penampil 360°</button>
         </div>
 
         <!-- Konten Pedometer -->
-        <div id="content-pedometer" class="space-y-6">
-            <div class="text-center p-6 bg-gray-700 rounded-lg">
-                <h2 class="text-lg font-semibold text-indigo-400 mb-2">Jumlah Langkah</h2>
-                <p id="step-count" class="text-6xl font-bold text-white">0</p>
-            </div>
-            <div class="grid grid-cols-2 gap-4">
-                 <div class="text-center p-4 bg-gray-700 rounded-lg">
-                    <h2 class="text-md font-semibold text-indigo-400 mb-1">Kecepatan</h2>
-                    <p id="speed" class="text-2xl font-bold text-white">0.00 <span class="text-sm">km/j</span></p>
-                </div>
-                 <div class="text-center p-4 bg-gray-700 rounded-lg">
-                    <h2 class="text-md font-semibold text-indigo-400 mb-1">Waktu</h2>
-                    <p id="timer" class="text-2xl font-bold text-white">0s</p>
-                </div>
-            </div>
-            <div class="flex justify-center">
-                <button id="pedometer-toggle" class="w-32 py-3 px-6 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 transition duration-300">
-                    Mulai
-                </button>
-            </div>
-             <div id="pedometer-permission-alert" class="hidden text-center p-4 bg-yellow-900/50 text-yellow-300 border border-yellow-700 rounded-lg">
-                Untuk memulai, mohon berikan izin akses ke sensor Gerak & Orientasi saat diminta oleh browser Anda.
-            </div>
+        <div id="content-pedometer" class="tab-content space-y-6">
+            <!-- Konten Pedometer tidak berubah -->
+            <div class="text-center p-6 bg-gray-700 rounded-lg"><h2 class="text-lg font-semibold text-indigo-400 mb-2">Jumlah Langkah</h2><p id="step-count" class="text-6xl font-bold text-white">0</p></div><div class="grid grid-cols-2 gap-4"><div class="text-center p-4 bg-gray-700 rounded-lg"><h2 class="text-md font-semibold text-indigo-400 mb-1">Kecepatan</h2><p id="speed" class="text-2xl font-bold text-white">0.00 <span class="text-sm">km/j</span></p></div><div class="text-center p-4 bg-gray-700 rounded-lg"><h2 class="text-md font-semibold text-indigo-400 mb-1">Waktu</h2><p id="timer" class="text-2xl font-bold text-white">0s</p></div></div><div class="flex justify-center"><button id="pedometer-toggle" class="w-32 py-3 px-6 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 transition duration-300">Mulai</button></div><div id="pedometer-permission-alert" class="hidden text-center p-4 bg-yellow-900/50 text-yellow-300 border border-yellow-700 rounded-lg">Untuk memulai, mohon berikan izin akses ke sensor Gerak & Orientasi.</div>
         </div>
 
         <!-- Konten Penggaris Digital -->
-        <div id="content-ruler" class="hidden space-y-4">
-            <div id="video-container" class="bg-gray-900">
-                <video id="video" playsinline></video>
-                <canvas id="canvas"></canvas>
+        <div id="content-ruler" class="tab-content hidden space-y-4">
+            <div id="video-container"><video id="video-ruler" class="video-element" playsinline></video><canvas id="canvas-ruler" class="canvas-element"></canvas></div>
+            <div class="text-center"><p id="ruler-status" class="text-gray-400 h-6">Mulai kamera untuk mengukur.</p><p id="ruler-result" class="text-2xl font-bold text-white mt-2">-</p></div>
+            <div class="grid grid-cols-2 gap-4"><button id="camera-ruler-toggle" class="w-full py-3 px-4 bg-teal-600 text-white font-semibold rounded-lg shadow-md hover:bg-teal-700 transition">Mulai Kamera</button><button id="mark-point" class="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>Mulai Mengukur</button></div>
+            <!-- Fitur Senter -->
+            <div class="border-t border-gray-700 pt-4 space-y-3">
+                 <h3 class="text-center font-semibold text-lg text-white">Kontrol Senter</h3>
+                 <button id="flash-toggle" class="w-full py-3 px-4 bg-yellow-600 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-700 disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>Nyalakan Senter</button>
+                 <div class="flex items-center gap-3">
+                     <input type="number" id="flash-count" min="1" max="10" value="3" class="w-full p-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-center">
+                     <button id="flash-blink" class="w-full py-2 px-4 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 disabled:bg-gray-600" disabled>Kedipkan Senter</button>
+                 </div>
             </div>
-            <div class="text-center">
-                <p id="ruler-status" class="text-gray-400 h-6">Mulai kamera untuk mengukur.</p>
-                <p id="ruler-result" class="text-2xl font-bold text-white mt-2">-</p>
-            </div>
-             <div class="grid grid-cols-3 gap-4">
-                 <button id="camera-toggle" class="w-full py-3 px-4 bg-teal-600 text-white font-semibold rounded-lg shadow-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-opacity-75 transition duration-300">
-                    Mulai Kamera
-                </button>
-                <button id="calibrate-btn" class="w-full py-3 px-4 bg-yellow-600 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-75 transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>
-                    Kalibrasi
-                </button>
-                <button id="mark-point" class="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>
-                    Tandai Titik
-                </button>
-            </div>
+        </div>
+        
+        <!-- Konten Pemindai QR -->
+        <div id="content-qr" class="tab-content hidden space-y-4">
+            <div id="qr-video-container"><video id="video-qr" class="video-element" playsinline></video><canvas id="canvas-qr" class="canvas-element"></canvas></div>
+            <div class="text-center"><p id="qr-status" class="text-gray-400 h-6">Arahkan kamera ke QR code.</p><p id="qr-result" class="text-lg font-bold text-white mt-2 bg-gray-700 p-3 rounded-lg break-all">-</p></div>
+            <div class="flex justify-center"><button id="camera-qr-toggle" class="w-full max-w-xs py-3 px-4 bg-teal-600 text-white font-semibold rounded-lg shadow-md hover:bg-teal-700 transition">Mulai Kamera</button></div>
+        </div>
+
+        <!-- Konten Penampil 360 VR -->
+        <div id="content-vr" class="tab-content hidden space-y-4">
+             <div id="viewer-360"></div>
+             <div class="text-center"><p id="vr-status" class="text-gray-400">Unggah gambar 360° (equirectangular) untuk memulai.</p></div>
+             <div class="flex justify-center"><input type="file" id="upload-360" accept="image/jpeg, image/png" class="hidden"><label for="upload-360" class="w-full max-w-xs cursor-pointer py-3 px-4 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 transition text-center">Unggah Gambar</label></div>
         </div>
     </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            // ... (Kode Pedometer tidak berubah, jadi disembunyikan untuk keringkasan)
-            const tabPedometer = document.getElementById('tab-pedometer');
-            const tabRuler = document.getElementById('tab-ruler');
-            const contentPedometer = document.getElementById('content-pedometer');
-            const contentRuler = document.getElementById('content-ruler');
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // State global
+    let activeStreams = { ruler: null, qr: null };
+    let activePedometer = false;
+    let active360 = false;
+    
+    // --- Logika Pedometer (Tidak Berubah) ---
+    const pedometerToggle = document.getElementById('pedometer-toggle'); const stepCountEl = document.getElementById('step-count'); const speedEl = document.getElementById('speed'); const timerEl = document.getElementById('timer'); const permissionAlert = document.getElementById('pedometer-permission-alert'); let stepCount = 0, lastMagnitude = 0, stepThreshold = 11.5, stepCooldown = 500, lastStepTime = 0, startTime = 0, timerInterval; const averageStepLengthMeters = 0.762;
+    function startPedometer() { if (typeof DeviceMotionEvent.requestPermission === 'function') { DeviceMotionEvent.requestPermission().then(p => { if (p === 'granted') runPedometer(); else alert('Izin sensor gerak ditolak.');}); } else { runPedometer(); } }
+    function runPedometer() { window.addEventListener('devicemotion', handleMotion); activePedometer = true; pedometerToggle.textContent = 'Berhenti'; pedometerToggle.classList.replace('bg-indigo-600', 'bg-red-600'); permissionAlert.classList.add('hidden'); resetPedometerState(); startTimer(); }
+    function stopPedometer() { if (!activePedometer) return; window.removeEventListener('devicemotion', handleMotion); activePedometer = false; pedometerToggle.textContent = 'Mulai'; pedometerToggle.classList.replace('bg-red-600', 'bg-indigo-600'); stopTimer(); }
+    function resetPedometerState() { stepCount = 0; lastMagnitude = 0; lastStepTime = 0; startTime = Date.now(); stepCountEl.textContent = '0'; speedEl.innerHTML = '0.00 <span class="text-sm">km/j</span>'; timerEl.textContent = '0s'; }
+    function startTimer() { timerInterval = setInterval(() => { const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000); timerEl.textContent = `${elapsedSeconds}s`; updateSpeed(elapsedSeconds); }, 1000); }
+    function stopTimer() { clearInterval(timerInterval); }
+    function updateSpeed(elapsedSeconds) { if (elapsedSeconds > 0) { const d = stepCount * averageStepLengthMeters; const s = d / elapsedSeconds; const kph = s * 3.6; speedEl.innerHTML = `${kph.toFixed(2)} <span class="text-sm">km/j</span>`; } }
+    const handleMotion = (e) => { if (!activePedometer) return; const { x, y, z } = e.accelerationIncludingGravity; const m = Math.sqrt(x * x + y * y + z * z); const d = m - lastMagnitude; lastMagnitude = m; const n = Date.now(); if (d > 1.2 && n - lastStepTime > stepCooldown) { if (m > stepThreshold) { stepCount++; stepCountEl.textContent = stepCount; lastStepTime = n; } } };
+    pedometerToggle.addEventListener('click', () => { activePedometer ? stopPedometer() : startPedometer(); });
 
-            function switchTab(activeTab) {
-                if (activeTab === 'pedometer') {
-                    tabPedometer.classList.add('active'); tabRuler.classList.remove('active');
-                    contentPedometer.style.display = 'block'; contentRuler.style.display = 'none';
-                    stopCamera();
-                } else {
-                    tabRuler.classList.add('active'); tabPedometer.classList.remove('active');
-                    contentRuler.style.display = 'block'; contentPedometer.style.display = 'none';
-                    stopPedometer();
-                }
-            }
-            tabPedometer.addEventListener('click', () => switchTab('pedometer'));
-            tabRuler.addEventListener('click', () => switchTab('ruler'));
-            const pedometerToggle = document.getElementById('pedometer-toggle');
-            const stepCountEl = document.getElementById('step-count');
-            const speedEl = document.getElementById('speed');
-            const timerEl = document.getElementById('timer');
-            const permissionAlert = document.getElementById('pedometer-permission-alert');
-            let isPedometerActive = false, stepCount = 0, lastMagnitude = 0, stepThreshold = 11.5, stepCooldown = 500, lastStepTime = 0, startTime = 0, timerInterval;
-            const averageStepLengthMeters = 0.762;
-            function startPedometer() {
-                if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                    DeviceMotionEvent.requestPermission().then(permissionState => {
-                        if (permissionState === 'granted') {
-                            window.addEventListener('devicemotion', handleMotion);
-                            isPedometerActive = true; pedometerToggle.textContent = 'Berhenti';
-                            pedometerToggle.classList.replace('bg-indigo-600', 'bg-red-600');
-                            pedometerToggle.classList.replace('hover:bg-indigo-700', 'hover:bg-red-700');
-                            permissionAlert.classList.add('hidden'); resetPedometerState(); startTimer();
-                        } else { alert('Izin akses sensor gerak ditolak.'); }
-                    }).catch(console.error);
-                } else {
-                    window.addEventListener('devicemotion', handleMotion);
-                    isPedometerActive = true; pedometerToggle.textContent = 'Berhenti';
-                    pedometerToggle.classList.replace('bg-indigo-600', 'bg-red-600');
-                    pedometerToggle.classList.replace('hover:bg-indigo-700', 'hover:bg-red-700');
-                    resetPedometerState(); startTimer();
-                }
-            }
-            function stopPedometer() {
-                window.removeEventListener('devicemotion', handleMotion);
-                isPedometerActive = false; pedometerToggle.textContent = 'Mulai';
-                pedometerToggle.classList.replace('bg-red-600', 'bg-indigo-600');
-                pedometerToggle.classList.replace('hover:bg-red-700', 'hover:bg-indigo-700');
-                stopTimer();
-            }
-            function resetPedometerState() { stepCount = 0; lastMagnitude = 0; lastStepTime = 0; startTime = Date.now(); stepCountEl.textContent = '0'; speedEl.innerHTML = '0.00 <span class="text-sm">km/j</span>'; timerEl.textContent = '0s'; }
-            function startTimer() { timerInterval = setInterval(() => { const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000); timerEl.textContent = `${elapsedSeconds}s`; updateSpeed(elapsedSeconds); }, 1000); }
-            function stopTimer() { clearInterval(timerInterval); }
-            function updateSpeed(elapsedSeconds) { if (elapsedSeconds > 0) { const distanceMeters = stepCount * averageStepLengthMeters; const speedMps = distanceMeters / elapsedSeconds; const speedKph = speedMps * 3.6; speedEl.innerHTML = `${speedKph.toFixed(2)} <span class="text-sm">km/j</span>`; } }
-            const handleMotion = (event) => { if (!isPedometerActive) return; const { x, y, z } = event.accelerationIncludingGravity; const magnitude = Math.sqrt(x * x + y * y + z * z); const magnitudeDelta = magnitude - lastMagnitude; lastMagnitude = magnitude; const now = Date.now(); if (magnitudeDelta > 1.2 && now - lastStepTime > stepCooldown) { if (magnitude > stepThreshold) { stepCount++; stepCountEl.textContent = stepCount; lastStepTime = now; } } };
-            pedometerToggle.addEventListener('click', () => { if (isPedometerActive) { stopPedometer(); } else { if (typeof DeviceMotionEvent.requestPermission === 'function') { permissionAlert.classList.remove('hidden'); } startPedometer(); } });
+    // --- Pengelola Kamera Umum ---
+    async function startCamera(type) {
+        if (activeStreams[type]) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            activeStreams[type] = stream;
+            const videoEl = document.getElementById(`video-${type}`);
+            videoEl.srcObject = stream;
+            await videoEl.play();
+            return stream;
+        } catch (err) {
+            console.error(`Error starting ${type} camera:`, err);
+            alert("Gagal mengakses kamera. Pastikan izin telah diberikan.");
+            return null;
+        }
+    }
+    function stopCamera(type) {
+        if (activeStreams[type]) {
+            activeStreams[type].getTracks().forEach(track => track.stop());
+            activeStreams[type] = null;
+        }
+    }
 
+    // --- Logika Penggaris & Senter ---
+    const rulerCamToggle = document.getElementById('camera-ruler-toggle');
+    const markPointBtn = document.getElementById('mark-point');
+    const videoRuler = document.getElementById('video-ruler');
+    const canvasRuler = document.getElementById('canvas-ruler');
+    const rulerStatus = document.getElementById('ruler-status');
+    const rulerResult = document.getElementById('ruler-result');
+    const flashToggleBtn = document.getElementById('flash-toggle');
+    const flashBlinkBtn = document.getElementById('flash-blink');
+    const flashCountInput = document.getElementById('flash-count');
+    const rulerCtx = canvasRuler.getContext('2d');
+    let isRulerMeasuring = false, rulerStartPoint = null, rulerAnimFrame;
 
-            // --- Logika Penggaris Digital (Diperbarui) ---
-            const cameraToggle = document.getElementById('camera-toggle');
-            const calibrateBtn = document.getElementById('calibrate-btn');
-            const markPointBtn = document.getElementById('mark-point');
-            const video = document.getElementById('video');
-            const canvas = document.getElementById('canvas');
-            const rulerStatus = document.getElementById('ruler-status');
-            const rulerResult = document.getElementById('ruler-result');
-            const ctx = canvas.getContext('2d');
-
-            let isCameraActive = false;
-            let stream;
-            let points = [];
-            let rulerMode = 'idle'; // 'idle', 'calibrating', 'measuring'
-            let pixelsPerCm = null;
-
-            function startCamera() {
-                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
-                    .then(s => {
-                        stream = s;
-                        video.srcObject = stream;
-                        video.play();
-                        isCameraActive = true;
-                        cameraToggle.textContent = 'Hentikan Kamera';
-                        cameraToggle.classList.replace('bg-teal-600', 'bg-red-600');
-                        cameraToggle.classList.replace('hover:bg-teal-700', 'hover:bg-red-700');
-                        calibrateBtn.disabled = false;
-                        markPointBtn.disabled = true; // Wajib kalibrasi dulu
-                        rulerStatus.textContent = 'Wajib kalibrasi sebelum mengukur.';
-                        
-                        video.onloadedmetadata = () => {
-                            canvas.width = video.videoWidth;
-                            canvas.height = video.videoHeight;
-                        };
-                    })
-                    .catch(err => {
-                        console.error("Error accessing camera: ", err);
-                        rulerStatus.textContent = 'Gagal mengakses kamera.';
-                        alert("Tidak bisa mengakses kamera. Pastikan Anda memberikan izin.");
-                    });
-            }
-
-            function stopCamera() {
-                if (stream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
-                isCameraActive = false;
-                video.srcObject = null;
-                cameraToggle.textContent = 'Mulai Kamera';
-                cameraToggle.classList.replace('bg-red-600', 'bg-teal-600');
-                cameraToggle.classList.replace('hover:bg-red-700', 'hover:bg-teal-700');
-                calibrateBtn.disabled = true;
-                markPointBtn.disabled = true;
-                markPointBtn.textContent = 'Tandai Titik';
-                rulerStatus.textContent = 'Mulai kamera untuk mengukur.';
-                rulerResult.textContent = '-';
-                points = [];
-                rulerMode = 'idle';
-                pixelsPerCm = null;
-                clearCanvas();
-            }
-
-            function clearCanvas() {
-                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-            }
-
-            function draw() {
-                clearCanvas();
-                if (points.length > 0) {
-                    ctx.beginPath();
-                    ctx.arc(points[0].x, points[0].y, 10, 0, 2 * Math.PI);
-                    ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
-                    ctx.fill();
-                    ctx.strokeStyle = 'white';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-
-                    if (points.length > 1) {
-                        ctx.beginPath();
-                        ctx.arc(points[1].x, points[1].y, 10, 0, 2 * Math.PI);
-                        ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
-                        ctx.fill();
-                        ctx.strokeStyle = 'white';
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-
-                        ctx.beginPath();
-                        ctx.moveTo(points[0].x, points[0].y);
-                        ctx.lineTo(points[1].x, points[1].y);
-                        ctx.strokeStyle = 'white'; ctx.lineWidth = 4; ctx.stroke();
-                        ctx.strokeStyle = 'rgba(79, 70, 229, 1)'; ctx.lineWidth = 3; ctx.stroke();
-                    }
-                }
-            }
-
-            calibrateBtn.addEventListener('click', () => {
-                rulerMode = 'calibrating';
-                points = [];
+    rulerCamToggle.addEventListener('click', async () => {
+        if (!activeStreams.ruler) {
+            const stream = await startCamera('ruler');
+            if (stream) {
+                rulerCamToggle.textContent = 'Hentikan Kamera';
                 markPointBtn.disabled = false;
-                markPointBtn.textContent = 'Tandai Awal Ref';
-                calibrateBtn.disabled = true;
-                rulerStatus.textContent = 'Tandai titik AWAL objek referensi.';
-                rulerResult.textContent = 'Kalibrasi...';
-            });
-
-            markPointBtn.addEventListener('click', () => {
-                const centerX = canvas.width / 2;
-                const centerY = canvas.height / 2;
-                points.push({ x: centerX, y: centerY });
-                draw();
-
-                if (rulerMode === 'calibrating') {
-                    if (points.length === 1) {
-                        markPointBtn.textContent = 'Tandai Akhir Ref';
-                        rulerStatus.textContent = 'Tandai titik AKHIR objek referensi.';
-                    } else if (points.length === 2) {
-                        performCalibration();
-                    }
-                } else if (rulerMode === 'measuring') {
-                     if (points.length === 1) {
-                        markPointBtn.textContent = 'Tandai Titik Akhir';
-                        rulerStatus.textContent = 'Arahkan ke titik akhir dan tandai lagi.';
-                    } else if (points.length === 2) {
-                        calculateDistance();
-                        markPointBtn.textContent = 'Ukur Ulang';
-                        rulerMode = 'idle'; // Selesai mengukur, siap untuk pengukuran baru
-                    }
-                } else if (rulerMode === 'idle' && pixelsPerCm) {
-                    // Ini adalah awal pengukuran baru
-                    points = [{ x: centerX, y: centerY }];
-                    draw();
-                    rulerMode = 'measuring';
-                    markPointBtn.textContent = 'Tandai Titik Akhir';
-                    rulerStatus.textContent = 'Arahkan ke titik akhir dan tandai lagi.';
-                    rulerResult.textContent = 'Mengukur...';
-                }
-            });
-
-            function performCalibration() {
-                const dx = points[1].x - points[0].x;
-                const dy = points[1].y - points[0].y;
-                const distanceInPixels = Math.sqrt(dx * dx + dy * dy);
-                
-                const realLengthCm = prompt("Masukkan panjang objek referensi dalam CM (contoh: 8.56 untuk kartu kredit):", "8.56");
-                
-                if (realLengthCm && !isNaN(parseFloat(realLengthCm)) && parseFloat(realLengthCm) > 0) {
-                    pixelsPerCm = distanceInPixels / parseFloat(realLengthCm);
-                    rulerStatus.textContent = `Kalibrasi berhasil! (${pixelsPerCm.toFixed(2)} piksel/cm)`;
-                    rulerResult.textContent = 'Siap mengukur objek.';
-                    rulerMode = 'idle'; // Siap untuk pengukuran
-                    markPointBtn.textContent = 'Mulai Mengukur';
-                    calibrateBtn.disabled = false; // Boleh kalibrasi ulang
-                    points = [];
-                    clearCanvas();
-                } else {
-                    alert("Input tidak valid. Kalibrasi dibatalkan.");
-                    rulerStatus.textContent = 'Kalibrasi gagal. Coba lagi.';
-                    rulerMode = 'idle';
-                    points = [];
-                    clearCanvas();
-                    calibrateBtn.disabled = false;
-                    markPointBtn.textContent = 'Tandai Titik';
-                    markPointBtn.disabled = true;
-                }
+                flashToggleBtn.disabled = !isFlashSupported(stream);
+                flashBlinkBtn.disabled = !isFlashSupported(stream);
+                videoRuler.onloadedmetadata = () => { canvasRuler.width = videoRuler.videoWidth; canvasRuler.height = videoRuler.videoHeight; };
             }
+        } else {
+            stopCamera('ruler');
+            if(rulerAnimFrame) cancelAnimationFrame(rulerAnimFrame);
+            isRulerMeasuring = false;
+            rulerCamToggle.textContent = 'Mulai Kamera';
+            markPointBtn.disabled = true;
+            flashToggleBtn.disabled = true;
+            flashBlinkBtn.disabled = true;
+        }
+    });
+    
+    markPointBtn.addEventListener('click', () => {
+        if (!isRulerMeasuring) {
+            isRulerMeasuring = true;
+            rulerStartPoint = { x: canvasRuler.width / 2, y: canvasRuler.height / 2 };
+            markPointBtn.textContent = 'Set Titik Akhir';
+            rulerStatus.textContent = 'Arahkan ke titik akhir...';
+            liveMeasurementLoop();
+        } else {
+            isRulerMeasuring = false;
+            cancelAnimationFrame(rulerAnimFrame);
+            const endPoint = { x: canvasRuler.width / 2, y: canvasRuler.height / 2 };
+            rulerCtx.clearRect(0, 0, canvasRuler.width, canvasRuler.height);
+            drawPoint(rulerStartPoint, rulerCtx); drawPoint(endPoint, rulerCtx); drawLine(rulerStartPoint, endPoint, rulerCtx);
+            const d = Math.hypot(endPoint.x - rulerStartPoint.x, endPoint.y - rulerStartPoint.y);
+            rulerResult.innerHTML = `${d.toFixed(1)} unit <p class="text-xs text-gray-500 mt-1">(Relatif)</p>`;
+            rulerStatus.textContent = 'Pengukuran selesai.';
+            markPointBtn.textContent = 'Ukur Baru';
+            rulerStartPoint = null;
+        }
+    });
 
-            function calculateDistance() {
-                if (points.length < 2 || !pixelsPerCm) return;
-                
-                const dx = points[1].x - points[0].x;
-                const dy = points[1].y - points[0].y;
-                const distanceInPixels = Math.sqrt(dx * dx + dy * dy);
-                const distanceInCm = distanceInPixels / pixelsPerCm;
-                
-                rulerStatus.textContent = 'Pengukuran selesai.';
-                rulerResult.innerHTML = `${distanceInCm.toFixed(2)} cm <p class="text-xs text-gray-500 mt-1">Pastikan jarak kamera ke objek sama saat kalibrasi.</p>`;
+    function liveMeasurementLoop() {
+        const currentCenter = { x: canvasRuler.width / 2, y: canvasRuler.height / 2 };
+        rulerCtx.clearRect(0, 0, canvasRuler.width, canvasRuler.height);
+        if (rulerStartPoint) {
+            drawPoint(rulerStartPoint, rulerCtx);
+            drawLine(rulerStartPoint, currentCenter, rulerCtx);
+            const d = Math.hypot(currentCenter.x - rulerStartPoint.x, currentCenter.y - rulerStartPoint.y);
+            rulerResult.textContent = `${d.toFixed(1)} unit`;
+        }
+        rulerAnimFrame = requestAnimationFrame(liveMeasurementLoop);
+    }
+    function drawPoint(p, ctx) { ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, 2 * Math.PI); ctx.fillStyle = 'rgba(239, 68, 68, 0.8)'; ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = 2; ctx.stroke(); }
+    function drawLine(p1, p2, ctx) { ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y); ctx.strokeStyle = 'white'; ctx.lineWidth = 5; ctx.stroke(); ctx.strokeStyle = '#4f46e5'; ctx.lineWidth = 3; ctx.stroke(); }
+
+    // Senter
+    function isFlashSupported(stream) {
+        const track = stream.getVideoTracks()[0];
+        const capabilities = track.getCapabilities();
+        return capabilities.torch;
+    }
+    async function toggleFlash(forceState) {
+        if (!activeStreams.ruler) return;
+        const track = activeStreams.ruler.getVideoTracks()[0];
+        try {
+            const currentState = track.getSettings().torch;
+            const newState = forceState !== undefined ? forceState : !currentState;
+            await track.applyConstraints({ advanced: [{ torch: newState }] });
+            flashToggleBtn.textContent = newState ? 'Matikan Senter' : 'Nyalakan Senter';
+        } catch (err) { console.error('Flash error:', err); }
+    }
+    flashToggleBtn.addEventListener('click', () => toggleFlash());
+    flashBlinkBtn.addEventListener('click', async () => {
+        const count = parseInt(flashCountInput.value);
+        if (isNaN(count) || count < 1) return;
+        flashBlinkBtn.disabled = true;
+        for (let i = 0; i < count; i++) {
+            await toggleFlash(true);
+            if(navigator.vibrate) navigator.vibrate(150);
+            await new Promise(r => setTimeout(r, 500)); // Flash on time
+            await toggleFlash(false);
+            if (i < count - 1) {
+                await new Promise(r => setTimeout(r, 3000)); // Delay between flashes
             }
+        }
+        flashBlinkBtn.disabled = false;
+    });
 
-            cameraToggle.addEventListener('click', () => {
-                isCameraActive ? stopCamera() : startCamera();
-            });
+    // --- Logika Pemindai QR ---
+    const qrCamToggle = document.getElementById('camera-qr-toggle');
+    const videoQr = document.getElementById('video-qr');
+    const canvasQr = document.getElementById('canvas-qr');
+    const qrStatus = document.getElementById('qr-status');
+    const qrResult = document.getElementById('qr-result');
+    const qrCtx = canvasQr.getContext('2d');
+    let qrAnimFrame;
+
+    qrCamToggle.addEventListener('click', async () => {
+        if (!activeStreams.qr) {
+            const stream = await startCamera('qr');
+            if (stream) {
+                qrCamToggle.textContent = 'Hentikan Kamera';
+                videoQr.onloadedmetadata = () => { canvasQr.width = videoQr.videoWidth; canvasQr.height = videoQr.videoHeight; scanQRCode(); };
+            }
+        } else {
+            stopCamera('qr');
+            cancelAnimationFrame(qrAnimFrame);
+            qrCamToggle.textContent = 'Mulai Kamera';
+        }
+    });
+
+    function scanQRCode() {
+        if (videoQr.readyState === videoQr.HAVE_ENOUGH_DATA) {
+            qrCtx.drawImage(videoQr, 0, 0, canvasQr.width, canvasQr.height);
+            const imageData = qrCtx.getImageData(0, 0, canvasQr.width, canvasQr.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+            if (code) {
+                drawLine(code.location.topLeftCorner, code.location.topRightCorner, qrCtx);
+                drawLine(code.location.topRightCorner, code.location.bottomRightCorner, qrCtx);
+                drawLine(code.location.bottomRightCorner, code.location.bottomLeftCorner, qrCtx);
+                drawLine(code.location.bottomLeftCorner, code.location.topLeftCorner, qrCtx);
+                qrResult.textContent = code.data;
+                qrStatus.textContent = "QR Code Terdeteksi!";
+            } else {
+                 qrStatus.textContent = "Arahkan kamera ke QR code...";
+            }
+        }
+        qrAnimFrame = requestAnimationFrame(scanQRCode);
+    }
+    
+    // --- Logika Penampil 360 VR ---
+    const upload360 = document.getElementById('upload-360');
+    const viewerContainer = document.getElementById('viewer-360');
+    const vrStatus = document.getElementById('vr-status');
+    let scene, camera, renderer, mesh;
+
+    upload360.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                init360(e.target.result);
+                start360Viewer();
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function init360(imageUrl) {
+        stop360Viewer(); // Hentikan viewer lama jika ada
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, viewerContainer.clientWidth / viewerContainer.clientHeight, 0.1, 1000);
+        renderer = new THREE.WebGLRenderer();
+        renderer.setSize(viewerContainer.clientWidth, viewerContainer.clientHeight);
+        viewerContainer.innerHTML = '';
+        viewerContainer.appendChild(renderer.domElement);
+
+        const geometry = new THREE.SphereGeometry(500, 60, 40);
+        geometry.scale(-1, 1, 1); // Agar gambar terlihat dari dalam bola
+        
+        const texture = new THREE.TextureLoader().load(imageUrl, () => {
+             vrStatus.textContent = "Gerakkan perangkat Anda untuk melihat sekeliling.";
         });
-    </script>
+        const material = new THREE.MeshBasicMaterial({ map: texture });
+        mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+        
+        camera.position.z = 0;
+        animate360();
+    }
+    
+    function animate360() {
+        if (!active360) return;
+        requestAnimationFrame(animate360);
+        renderer.render(scene, camera);
+    }
+
+    function handleOrientation(event) {
+        const alpha = THREE.MathUtils.degToRad(event.alpha); // Z
+        const beta = THREE.MathUtils.degToRad(event.beta);   // X
+        const gamma = THREE.MathUtils.degToRad(event.gamma); // Y
+        const orient = THREE.MathUtils.degToRad(window.orientation || 0);
+        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(beta, alpha, -gamma, 'YXZ'));
+        const q_orient = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -orient);
+        camera.quaternion.copy(q.multiply(q_orient));
+    }
+
+    function start360Viewer() {
+        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission().then(p => {
+                if (p === 'granted') {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    active360 = true;
+                }
+            });
+        } else {
+             window.addEventListener('deviceorientation', handleOrientation);
+             active360 = true;
+        }
+    }
+    
+    function stop360Viewer() {
+        window.removeEventListener('deviceorientation', handleOrientation);
+        active360 = false;
+        scene = null; camera = null; renderer = null; mesh = null;
+        if(viewerContainer) viewerContainer.innerHTML = '';
+    }
+
+    // --- Pengelola Tab ---
+    const tabs = document.querySelectorAll('.tab-button');
+    const contents = document.querySelectorAll('.tab-content');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const target = tab.dataset.tab;
+            
+            // Hentikan semua fitur aktif sebelum beralih
+            stopPedometer();
+            stopCamera('ruler');
+            stopCamera('qr');
+            stop360Viewer();
+            if(rulerAnimFrame) cancelAnimationFrame(rulerAnimFrame);
+            if(qrAnimFrame) cancelAnimationFrame(qrAnimFrame);
+
+            contents.forEach(c => c.classList.add('hidden'));
+            document.getElementById(`content-${target}`).classList.remove('hidden');
+            
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+        });
+    });
+});
+</script>
 </body>
 </html>
