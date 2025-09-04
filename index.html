@@ -9,7 +9,7 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            touch-action: manipulation; /* Mencegah zoom saat disentuh */
+            touch-action: manipulation;
         }
         .tab-button.active {
             background-color: #4f46e5;
@@ -39,15 +39,16 @@
         #canvas {
             z-index: 10;
         }
-        .dot {
+        /* Penanda crosshair di tengah */
+        #video-container::after {
+            content: '+';
             position: absolute;
-            width: 16px;
-            height: 16px;
-            background-color: rgba(255, 0, 0, 0.7);
-            border: 2px solid white;
-            border-radius: 50%;
+            top: 50%;
+            left: 50%;
             transform: translate(-50%, -50%);
-            z-index: 20;
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.7);
+            z-index: 15;
             pointer-events: none;
         }
     </style>
@@ -97,12 +98,15 @@
                 <canvas id="canvas"></canvas>
             </div>
             <div class="text-center">
-                <p id="ruler-status" class="text-gray-400 h-6">Mulai kamera untuk mengukur</p>
+                <p id="ruler-status" class="text-gray-400 h-6">Mulai kamera untuk mengukur.</p>
                 <p id="ruler-result" class="text-2xl font-bold text-white mt-2">-</p>
             </div>
-             <div class="grid grid-cols-2 gap-4">
+             <div class="grid grid-cols-3 gap-4">
                  <button id="camera-toggle" class="w-full py-3 px-4 bg-teal-600 text-white font-semibold rounded-lg shadow-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-opacity-75 transition duration-300">
                     Mulai Kamera
+                </button>
+                <button id="calibrate-btn" class="w-full py-3 px-4 bg-yellow-600 text-white font-semibold rounded-lg shadow-md hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-75 transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>
+                    Kalibrasi
                 </button>
                 <button id="mark-point" class="w-full py-3 px-4 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-opacity-75 transition duration-300 disabled:bg-gray-600 disabled:cursor-not-allowed" disabled>
                     Tandai Titik
@@ -113,7 +117,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            // Logika Navigasi Tab
+            // ... (Kode Pedometer tidak berubah, jadi disembunyikan untuk keringkasan)
             const tabPedometer = document.getElementById('tab-pedometer');
             const tabRuler = document.getElementById('tab-ruler');
             const contentPedometer = document.getElementById('content-pedometer');
@@ -121,145 +125,61 @@
 
             function switchTab(activeTab) {
                 if (activeTab === 'pedometer') {
-                    tabPedometer.classList.add('active');
-                    tabRuler.classList.remove('active');
-                    contentPedometer.style.display = 'block';
-                    contentRuler.style.display = 'none';
-                    stopCamera(); // Matikan kamera saat beralih tab
+                    tabPedometer.classList.add('active'); tabRuler.classList.remove('active');
+                    contentPedometer.style.display = 'block'; contentRuler.style.display = 'none';
+                    stopCamera();
                 } else {
-                    tabRuler.classList.add('active');
-                    tabPedometer.classList.remove('active');
-                    contentRuler.style.display = 'block';
-                    contentPedometer.style.display = 'none';
-                    stopPedometer(); // Matikan pedometer saat beralih tab
+                    tabRuler.classList.add('active'); tabPedometer.classList.remove('active');
+                    contentRuler.style.display = 'block'; contentPedometer.style.display = 'none';
+                    stopPedometer();
                 }
             }
-
             tabPedometer.addEventListener('click', () => switchTab('pedometer'));
             tabRuler.addEventListener('click', () => switchTab('ruler'));
-
-            // --- Logika Pedometer ---
             const pedometerToggle = document.getElementById('pedometer-toggle');
             const stepCountEl = document.getElementById('step-count');
             const speedEl = document.getElementById('speed');
             const timerEl = document.getElementById('timer');
             const permissionAlert = document.getElementById('pedometer-permission-alert');
-
-            let isPedometerActive = false;
-            let stepCount = 0;
-            let lastMagnitude = 0;
-            let stepThreshold = 11.5; // Sesuaikan ambang batas ini jika perlu
-            let stepCooldown = 500; // 500ms cooldown antar langkah
-            let lastStepTime = 0;
-            let startTime = 0;
-            let timerInterval;
-            
-            // Faktor untuk konversi
-            const averageStepLengthMeters = 0.762; // Rata-rata panjang langkah dalam meter
-
+            let isPedometerActive = false, stepCount = 0, lastMagnitude = 0, stepThreshold = 11.5, stepCooldown = 500, lastStepTime = 0, startTime = 0, timerInterval;
+            const averageStepLengthMeters = 0.762;
             function startPedometer() {
-                // Meminta izin akses sensor
                 if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                    DeviceMotionEvent.requestPermission()
-                        .then(permissionState => {
-                            if (permissionState === 'granted') {
-                                window.addEventListener('devicemotion', handleMotion);
-                                isPedometerActive = true;
-                                pedometerToggle.textContent = 'Berhenti';
-                                pedometerToggle.classList.replace('bg-indigo-600', 'bg-red-600');
-                                pedometerToggle.classList.replace('hover:bg-indigo-700', 'hover:bg-red-700');
-                                permissionAlert.classList.add('hidden');
-                                resetPedometerState();
-                                startTimer();
-                            } else {
-                                alert('Izin akses sensor gerak ditolak. Pedometer tidak dapat berfungsi.');
-                            }
-                        })
-                        .catch(console.error);
+                    DeviceMotionEvent.requestPermission().then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('devicemotion', handleMotion);
+                            isPedometerActive = true; pedometerToggle.textContent = 'Berhenti';
+                            pedometerToggle.classList.replace('bg-indigo-600', 'bg-red-600');
+                            pedometerToggle.classList.replace('hover:bg-indigo-700', 'hover:bg-red-700');
+                            permissionAlert.classList.add('hidden'); resetPedometerState(); startTimer();
+                        } else { alert('Izin akses sensor gerak ditolak.'); }
+                    }).catch(console.error);
                 } else {
-                     // Untuk browser yang tidak memerlukan izin eksplisit (misalnya Android Chrome)
                     window.addEventListener('devicemotion', handleMotion);
-                    isPedometerActive = true;
-                    pedometerToggle.textContent = 'Berhenti';
+                    isPedometerActive = true; pedometerToggle.textContent = 'Berhenti';
                     pedometerToggle.classList.replace('bg-indigo-600', 'bg-red-600');
                     pedometerToggle.classList.replace('hover:bg-indigo-700', 'hover:bg-red-700');
-                    resetPedometerState();
-                    startTimer();
+                    resetPedometerState(); startTimer();
                 }
             }
-
             function stopPedometer() {
                 window.removeEventListener('devicemotion', handleMotion);
-                isPedometerActive = false;
-                pedometerToggle.textContent = 'Mulai';
+                isPedometerActive = false; pedometerToggle.textContent = 'Mulai';
                 pedometerToggle.classList.replace('bg-red-600', 'bg-indigo-600');
                 pedometerToggle.classList.replace('hover:bg-red-700', 'hover:bg-indigo-700');
                 stopTimer();
             }
+            function resetPedometerState() { stepCount = 0; lastMagnitude = 0; lastStepTime = 0; startTime = Date.now(); stepCountEl.textContent = '0'; speedEl.innerHTML = '0.00 <span class="text-sm">km/j</span>'; timerEl.textContent = '0s'; }
+            function startTimer() { timerInterval = setInterval(() => { const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000); timerEl.textContent = `${elapsedSeconds}s`; updateSpeed(elapsedSeconds); }, 1000); }
+            function stopTimer() { clearInterval(timerInterval); }
+            function updateSpeed(elapsedSeconds) { if (elapsedSeconds > 0) { const distanceMeters = stepCount * averageStepLengthMeters; const speedMps = distanceMeters / elapsedSeconds; const speedKph = speedMps * 3.6; speedEl.innerHTML = `${speedKph.toFixed(2)} <span class="text-sm">km/j</span>`; } }
+            const handleMotion = (event) => { if (!isPedometerActive) return; const { x, y, z } = event.accelerationIncludingGravity; const magnitude = Math.sqrt(x * x + y * y + z * z); const magnitudeDelta = magnitude - lastMagnitude; lastMagnitude = magnitude; const now = Date.now(); if (magnitudeDelta > 1.2 && now - lastStepTime > stepCooldown) { if (magnitude > stepThreshold) { stepCount++; stepCountEl.textContent = stepCount; lastStepTime = now; } } };
+            pedometerToggle.addEventListener('click', () => { if (isPedometerActive) { stopPedometer(); } else { if (typeof DeviceMotionEvent.requestPermission === 'function') { permissionAlert.classList.remove('hidden'); } startPedometer(); } });
 
-            function resetPedometerState() {
-                stepCount = 0;
-                lastMagnitude = 0;
-                lastStepTime = 0;
-                startTime = Date.now();
-                stepCountEl.textContent = '0';
-                speedEl.innerHTML = '0.00 <span class="text-sm">km/j</span>';
-                timerEl.textContent = '0s';
-            }
-            
-            function startTimer() {
-                timerInterval = setInterval(() => {
-                    const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
-                    timerEl.textContent = `${elapsedSeconds}s`;
-                    updateSpeed(elapsedSeconds);
-                }, 1000);
-            }
 
-            function stopTimer() {
-                clearInterval(timerInterval);
-            }
-
-            function updateSpeed(elapsedSeconds) {
-                if (elapsedSeconds > 0) {
-                    const distanceMeters = stepCount * averageStepLengthMeters;
-                    const speedMps = distanceMeters / elapsedSeconds; // meter per detik
-                    const speedKph = speedMps * 3.6; // kilometer per jam
-                    speedEl.innerHTML = `${speedKph.toFixed(2)} <span class="text-sm">km/j</span>`;
-                }
-            }
-
-            const handleMotion = (event) => {
-                if (!isPedometerActive) return;
-                
-                const { x, y, z } = event.accelerationIncludingGravity;
-                const magnitude = Math.sqrt(x * x + y * y + z * z);
-                const magnitudeDelta = magnitude - lastMagnitude;
-                lastMagnitude = magnitude;
-
-                const now = Date.now();
-                if (magnitudeDelta > 1.2 && now - lastStepTime > stepCooldown) { // Deteksi puncak gerakan
-                    if (magnitude > stepThreshold) {
-                         stepCount++;
-                         stepCountEl.textContent = stepCount;
-                         lastStepTime = now;
-                    }
-                }
-            };
-            
-            pedometerToggle.addEventListener('click', () => {
-                if (isPedometerActive) {
-                    stopPedometer();
-                } else {
-                    // Tampilkan notifikasi izin untuk iOS
-                    if (typeof DeviceMotionEvent.requestPermission === 'function') {
-                       permissionAlert.classList.remove('hidden');
-                    }
-                    startPedometer();
-                }
-            });
-
-            // --- Logika Penggaris Digital ---
+            // --- Logika Penggaris Digital (Diperbarui) ---
             const cameraToggle = document.getElementById('camera-toggle');
+            const calibrateBtn = document.getElementById('calibrate-btn');
             const markPointBtn = document.getElementById('mark-point');
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
@@ -270,17 +190,11 @@
             let isCameraActive = false;
             let stream;
             let points = [];
-            let isMeasuring = false;
+            let rulerMode = 'idle'; // 'idle', 'calibrating', 'measuring'
+            let pixelsPerCm = null;
 
             function startCamera() {
-                const constraints = {
-                    video: {
-                        facingMode: 'environment', // Mengutamakan kamera belakang
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    }
-                };
-                navigator.mediaDevices.getUserMedia(constraints)
+                navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } })
                     .then(s => {
                         stream = s;
                         video.srcObject = stream;
@@ -289,10 +203,10 @@
                         cameraToggle.textContent = 'Hentikan Kamera';
                         cameraToggle.classList.replace('bg-teal-600', 'bg-red-600');
                         cameraToggle.classList.replace('hover:bg-teal-700', 'hover:bg-red-700');
-                        markPointBtn.disabled = false;
-                        rulerStatus.textContent = 'Kamera aktif. Tekan "Tandai Titik".';
+                        calibrateBtn.disabled = false;
+                        markPointBtn.disabled = true; // Wajib kalibrasi dulu
+                        rulerStatus.textContent = 'Wajib kalibrasi sebelum mengukur.';
                         
-                        // Sesuaikan ukuran canvas dengan video
                         video.onloadedmetadata = () => {
                             canvas.width = video.videoWidth;
                             canvas.height = video.videoHeight;
@@ -301,7 +215,7 @@
                     .catch(err => {
                         console.error("Error accessing camera: ", err);
                         rulerStatus.textContent = 'Gagal mengakses kamera.';
-                        alert("Tidak bisa mengakses kamera. Pastikan Anda memberikan izin dan tidak ada aplikasi lain yang menggunakannya.");
+                        alert("Tidak bisa mengakses kamera. Pastikan Anda memberikan izin.");
                     });
             }
 
@@ -314,12 +228,14 @@
                 cameraToggle.textContent = 'Mulai Kamera';
                 cameraToggle.classList.replace('bg-red-600', 'bg-teal-600');
                 cameraToggle.classList.replace('hover:bg-red-700', 'hover:bg-teal-700');
+                calibrateBtn.disabled = true;
                 markPointBtn.disabled = true;
                 markPointBtn.textContent = 'Tandai Titik';
                 rulerStatus.textContent = 'Mulai kamera untuk mengukur.';
                 rulerResult.textContent = '-';
                 points = [];
-                isMeasuring = false;
+                rulerMode = 'idle';
+                pixelsPerCm = null;
                 clearCanvas();
             }
 
@@ -330,7 +246,6 @@
             function draw() {
                 clearCanvas();
                 if (points.length > 0) {
-                    // Gambar titik pertama
                     ctx.beginPath();
                     ctx.arc(points[0].x, points[0].y, 10, 0, 2 * Math.PI);
                     ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
@@ -340,7 +255,6 @@
                     ctx.stroke();
 
                     if (points.length > 1) {
-                         // Gambar titik kedua
                         ctx.beginPath();
                         ctx.arc(points[1].x, points[1].y, 10, 0, 2 * Math.PI);
                         ctx.fillStyle = 'rgba(239, 68, 68, 0.8)';
@@ -349,70 +263,101 @@
                         ctx.lineWidth = 2;
                         ctx.stroke();
 
-                        // Gambar garis
                         ctx.beginPath();
                         ctx.moveTo(points[0].x, points[0].y);
                         ctx.lineTo(points[1].x, points[1].y);
-                        ctx.strokeStyle = 'white';
-                        ctx.lineWidth = 4;
-                        ctx.stroke();
-                        ctx.strokeStyle = 'rgba(79, 70, 229, 1)';
-                        ctx.lineWidth = 3;
-                        ctx.stroke();
+                        ctx.strokeStyle = 'white'; ctx.lineWidth = 4; ctx.stroke();
+                        ctx.strokeStyle = 'rgba(79, 70, 229, 1)'; ctx.lineWidth = 3; ctx.stroke();
                     }
                 }
             }
 
-            function handleMarkPoint() {
-                if (!isMeasuring) { // Titik Awal
-                    points = []; // Reset titik
-                    isMeasuring = true;
-                    // Tandai titik di tengah canvas
-                    const centerX = canvas.width / 2;
-                    const centerY = canvas.height / 2;
-                    points.push({ x: centerX, y: centerY });
-                    
+            calibrateBtn.addEventListener('click', () => {
+                rulerMode = 'calibrating';
+                points = [];
+                markPointBtn.disabled = false;
+                markPointBtn.textContent = 'Tandai Awal Ref';
+                calibrateBtn.disabled = true;
+                rulerStatus.textContent = 'Tandai titik AWAL objek referensi.';
+                rulerResult.textContent = 'Kalibrasi...';
+            });
+
+            markPointBtn.addEventListener('click', () => {
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                points.push({ x: centerX, y: centerY });
+                draw();
+
+                if (rulerMode === 'calibrating') {
+                    if (points.length === 1) {
+                        markPointBtn.textContent = 'Tandai Akhir Ref';
+                        rulerStatus.textContent = 'Tandai titik AKHIR objek referensi.';
+                    } else if (points.length === 2) {
+                        performCalibration();
+                    }
+                } else if (rulerMode === 'measuring') {
+                     if (points.length === 1) {
+                        markPointBtn.textContent = 'Tandai Titik Akhir';
+                        rulerStatus.textContent = 'Arahkan ke titik akhir dan tandai lagi.';
+                    } else if (points.length === 2) {
+                        calculateDistance();
+                        markPointBtn.textContent = 'Ukur Ulang';
+                        rulerMode = 'idle'; // Selesai mengukur, siap untuk pengukuran baru
+                    }
+                } else if (rulerMode === 'idle' && pixelsPerCm) {
+                    // Ini adalah awal pengukuran baru
+                    points = [{ x: centerX, y: centerY }];
+                    draw();
+                    rulerMode = 'measuring';
                     markPointBtn.textContent = 'Tandai Titik Akhir';
                     rulerStatus.textContent = 'Arahkan ke titik akhir dan tandai lagi.';
                     rulerResult.textContent = 'Mengukur...';
-                    draw();
-                } else { // Titik Akhir
-                    const centerX = canvas.width / 2;
-                    const centerY = canvas.height / 2;
-                    points.push({ x: centerX, y: centerY });
-
-                    isMeasuring = false;
-                    markPointBtn.textContent = 'Ukur Ulang';
-                    calculateDistance();
-                    draw();
                 }
-            }
+            });
 
-            function calculateDistance() {
-                if (points.length < 2) return;
-                
-                // Ini adalah placeholder. Pengukuran akurat memerlukan kalibrasi atau sensor AR.
-                // Untuk demo, kita akan menampilkan jarak dalam "unit" piksel.
+            function performCalibration() {
                 const dx = points[1].x - points[0].x;
                 const dy = points[1].y - points[0].y;
                 const distanceInPixels = Math.sqrt(dx * dx + dy * dy);
                 
-                rulerStatus.textContent = 'Pengukuran selesai. Hasil di bawah.';
-                rulerResult.textContent = `${distanceInPixels.toFixed(1)} unit`;
+                const realLengthCm = prompt("Masukkan panjang objek referensi dalam CM (contoh: 8.56 untuk kartu kredit):", "8.56");
                 
-                // Tambahkan catatan bahwa ini bukan ukuran dunia nyata
-                rulerResult.innerHTML += '<p class="text-xs text-gray-500 mt-1">(Jarak dalam piksel, bukan cm/meter. Memerlukan kalibrasi untuk akurasi.)</p>';
+                if (realLengthCm && !isNaN(parseFloat(realLengthCm)) && parseFloat(realLengthCm) > 0) {
+                    pixelsPerCm = distanceInPixels / parseFloat(realLengthCm);
+                    rulerStatus.textContent = `Kalibrasi berhasil! (${pixelsPerCm.toFixed(2)} piksel/cm)`;
+                    rulerResult.textContent = 'Siap mengukur objek.';
+                    rulerMode = 'idle'; // Siap untuk pengukuran
+                    markPointBtn.textContent = 'Mulai Mengukur';
+                    calibrateBtn.disabled = false; // Boleh kalibrasi ulang
+                    points = [];
+                    clearCanvas();
+                } else {
+                    alert("Input tidak valid. Kalibrasi dibatalkan.");
+                    rulerStatus.textContent = 'Kalibrasi gagal. Coba lagi.';
+                    rulerMode = 'idle';
+                    points = [];
+                    clearCanvas();
+                    calibrateBtn.disabled = false;
+                    markPointBtn.textContent = 'Tandai Titik';
+                    markPointBtn.disabled = true;
+                }
+            }
+
+            function calculateDistance() {
+                if (points.length < 2 || !pixelsPerCm) return;
+                
+                const dx = points[1].x - points[0].x;
+                const dy = points[1].y - points[0].y;
+                const distanceInPixels = Math.sqrt(dx * dx + dy * dy);
+                const distanceInCm = distanceInPixels / pixelsPerCm;
+                
+                rulerStatus.textContent = 'Pengukuran selesai.';
+                rulerResult.innerHTML = `${distanceInCm.toFixed(2)} cm <p class="text-xs text-gray-500 mt-1">Pastikan jarak kamera ke objek sama saat kalibrasi.</p>`;
             }
 
             cameraToggle.addEventListener('click', () => {
-                if (isCameraActive) {
-                    stopCamera();
-                } else {
-                    startCamera();
-                }
+                isCameraActive ? stopCamera() : startCamera();
             });
-
-            markPointBtn.addEventListener('click', handleMarkPoint);
         });
     </script>
 </body>
